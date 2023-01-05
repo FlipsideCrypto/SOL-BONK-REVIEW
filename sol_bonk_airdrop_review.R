@@ -94,5 +94,7 @@ final_bonk <- final_bonk %>% mutate(
   )
 )
 
+final_bonk[is.na(final_bonk)] <- 0
+
 write.csv(final_bonk, "bonk_review_labeled.csv")
 
