@@ -95,6 +95,15 @@ final_bonk <- final_bonk %>% mutate(
 )
 
 final_bonk[is.na(final_bonk)] <- 0
-
+final_bonk$discrepancy <- final_bonk$CLAIMED_TOKEN_VOLUME - final_bonk$total_allocation_billions
 write.csv(final_bonk, "bonk_review_labeled.csv")
 
+
+fb <- final_bonk %>% group_by(label) %>% 
+  summarise(
+    total_received = sum(CLAIMED_TOKEN_VOLUME),
+    total_owed = sum(total_allocation_billions),
+    diff =  sum(CLAIMED_TOKEN_VOLUME) - sum(total_allocation_billions)
+  )
+
+write.csv(fb, "discrepancy.csv")
