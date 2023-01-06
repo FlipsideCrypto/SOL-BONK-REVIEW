@@ -84,6 +84,8 @@ nft_holders_at_snapshot$allocation_billions[grepl("openbook -", nft_holders_at_s
   nft_holders_at_snapshot$allocation_billions[grepl("openbook -", nft_holders_at_snapshot$category)] * 30
 }
 
+write.csv(nft_holders_at_snapshot, "nft_qualifier_nonunique_address.csv")
+
 # Swap dev names 
 
 dev_names <- read.csv("dev_name_swap.csv", header = FALSE)
