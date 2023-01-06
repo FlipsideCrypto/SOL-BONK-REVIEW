@@ -1,6 +1,6 @@
 library(shroomDK)
 library(dplyr)
-
+library(data.table)
 
 #' The BONK airdrop had some failed transactions. We are parsing all receivers of the airdrop
 #' and comparing their received BONK with the proportional amounts they should have gotten 
@@ -13,8 +13,8 @@ recipients_query <- {
 with recipients as (SELECT tx_id, tx_from as giver, tx_to as receiver, amount, mint from 
   solana.core.fact_transfers
   where tx_from in (
-  '9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw',
-  '6JZoszTBzkGsskbheswiS6z2LRGckyFY4SpEGiLZqA9p')
+  '9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw'
+  --,'6JZoszTBzkGsskbheswiS6z2LRGckyFY4SpEGiLZqA9p'
   and mint = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'
   and block_timestamp > '2022-12-24'
 )
@@ -71,6 +71,18 @@ write.csv(x = unique(nft_holders_at_snapshot[, c("category", "total_in_category"
 nft_holders_at_snapshot <- nft_holders_at_snapshot %>% 
   group_by(category) %>% 
   mutate(allocation_billions = 500 * count/total_in_category)
+
+# Exceptions:
+# Art Collectors: 10T 
+# Developers: 5T
+# Openbook: 15T
+#the data.table is because eric doesn't want to learn dplyr right this second
+#handling the exceptions
+nft_holders_at_snapshot <- as.data.table(nft_holders_at_snapshot)
+nft_holders_at_snapshot[ str_detect(category,'devs -'), allocation_billions := 5000 * count/total_in_category ]
+nft_holders_at_snapshot[ str_detect(category,'art -'), allocation_billions := 10000 * count/total_in_category ]
+nft_holders_at_snapshot[ str_detect(category,'openbook -'), allocation_billions := 15000 * count/total_in_category ]
+
 
 # Identify Allocation across Categories ----
 
