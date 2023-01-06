@@ -12,9 +12,7 @@ recipients_query <- {
   "
 with recipients as (SELECT tx_id, tx_from as giver, tx_to as receiver, amount, mint from 
   solana.core.fact_transfers
-  where tx_from in (
-  '9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw'
-  --,'6JZoszTBzkGsskbheswiS6z2LRGckyFY4SpEGiLZqA9p'
+  where tx_from = '9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw'
   and mint = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'
   and block_timestamp > '2022-12-24'
 )
