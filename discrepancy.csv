@@ -1,6 +1,6 @@
-,label,total_received,total_owed,diff
-1,Did not Receive Drop, -   ," 2,626,461,057,408.14 "," (2,626,461,057,408.14)"
-2,Missing a piece of their drop," 9,378,609,357,704.11 "," 14,069,641,931,464.80 "," (4,691,032,573,760.71)"
-3,Received Exact Drop!," 173,469,387,755.10 "," 173,469,387,755.10 ", -   
-4,Received More than Expected," 5,486,491,656,130.16 "," 2,630,427,623,371.94 "," 2,856,064,032,758.22 "
-5,Received w/o NFT qualification," 64,158,427,379,183.80 ", -   ," 64,158,427,379,183.80 "
+"","label","total_received","total_owed","diff"
+"1","Did not Receive Drop",0,1994777731759.38,-1994777731759.38
+"2","Missing a piece of their drop",36441661895740.5,41790069396544.1,-5348407500803.65
+"3","Received Exact Drop!",173469387755.102,173469387755.102,0
+"4","Received More than Expected",6055870442680.09,5541683483941.38,514186958738.709
+"5","Received w/o NFT qualification",36525996054597.5,0,36525996054597.5

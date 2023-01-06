@@ -1,11 +1,9 @@
 library(shroomDK)
 library(dplyr)
-library(data.table)
 
 #' The BONK airdrop had some failed transactions. We are parsing all receivers of the airdrop
 #' and comparing their received BONK with the proportional amounts they should have gotten 
 #' as holders of specific NFTs. 
-
 
 # Airdrop Recipients ----
 recipients_query <- {
@@ -71,16 +69,28 @@ nft_holders_at_snapshot <- nft_holders_at_snapshot %>%
   mutate(allocation_billions = 500 * count/total_in_category)
 
 # Exceptions:
-# Art Collectors: 10T 
-# Developers: 5T
-# Openbook: 15T
-#the data.table is because eric doesn't want to learn dplyr right this second
-#handling the exceptions
-nft_holders_at_snapshot <- as.data.table(nft_holders_at_snapshot)
-nft_holders_at_snapshot[ str_detect(category,'devs -'), allocation_billions := 5000 * count/total_in_category ]
-nft_holders_at_snapshot[ str_detect(category,'art -'), allocation_billions := 10000 * count/total_in_category ]
-nft_holders_at_snapshot[ str_detect(category,'openbook -'), allocation_billions := 15000 * count/total_in_category ]
+# Developers: 5T (10x the 500 base)
+# Art Collectors: 10T  (this is 20x base)
+# Openbook: 15T (30x base)
 
+nft_holders_at_snapshot$allocation_billions[grepl("devs -", nft_holders_at_snapshot$category)] <- {
+  nft_holders_at_snapshot$allocation_billions[grepl("devs -", nft_holders_at_snapshot$category)] * 10
+}
+
+nft_holders_at_snapshot$allocation_billions[grepl("art -", nft_holders_at_snapshot$category)] <- {
+  nft_holders_at_snapshot$allocation_billions[grepl("art -", nft_holders_at_snapshot$category)] * 20
+}
+nft_holders_at_snapshot$allocation_billions[grepl("openbook -", nft_holders_at_snapshot$category)] <- {
+  nft_holders_at_snapshot$allocation_billions[grepl("openbook -", nft_holders_at_snapshot$category)] * 30
+}
+
+# Swap dev names 
+
+dev_names <- read.csv("dev_name_swap.csv", header = FALSE)
+
+for(i in 1:nrow(dev_names)){
+  nft_holders_at_snapshot$address <- gsub(dev_names$V1[i], dev_names$V2[i], nft_holders_at_snapshot$address )
+}
 
 # Identify Allocation across Categories ----
 
