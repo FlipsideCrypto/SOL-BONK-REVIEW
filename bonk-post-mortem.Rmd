@@ -1,0 +1,297 @@
+---
+title: "BONK Post-Mortem"
+author: "Charliemarketplace"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    css: "styles.css"
+    includes:
+      in_header: header.html
+    code_folding: hide
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+FlipsideCrypto's Research is open source. Check out all the code for this report [here](https://github.com/FlipsideCrypto/SOL-BONK-REVIEW) on github.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Intro 
+
+BONK is the latest meme-coin making waves on the Solana blockchain. You may have heard of 
+DOGE coin (which has it's own chain!) and its Ethereum cousin Shiba Inu. Memes matter 
+and BONK has brought excitement and activity back to Solana after a rough few weeks of narratives 
+(and exaggerated adversarial marketing...) stemming from the FTX-collapse.
+
+On Ethereum, where gas costs can be prohibitive, airdrops are normally user-claimed. Developers 
+will mint a supply of tokens and generate a [Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree) 
+with which addresses get how many tokens.
+
+It is then up to those addresses to bring (i.e., grab from an off-chain database) a cryptographic proof stating
+where in the tree they are and how many tokens they can claim.
+
+As with everything, there are tradeoffs. This lets users choose which airdrops they want to claim, but it makes it 
+harder for users to validate paying the gas costs to claim their airdrops since new tokens may have low liquidity or 
+low value.
+
+Would you pay \$20 in gas to get \$100 in tokens? Maybe, assuming there's a real place to sell it or you really believe in the token.
+
+BONK, on the Solana blockchain, didn't have to worry about this gas due to design decisions Solana makes to make 
+transactions very cheap (think < $0.05). This allowed them to *send the BONK directly* to the recipients.
+
+A huge positive is everyone woke up to a new token in their wallets without having to do anything! The negative is, 
+as with any blockchain, transactions can fail sometimes and some may not get the tokens they were allocated.
+
+This is a post-mortem on the BONK airdrop and how Flipside Crypto Data Science supported the BONK team in identifying and closing the gaps in the airdrop.
+
+# Airdrop Design 
+
+BONK's airdrop was a distribution of 49,500,000,000,000 (49.5 Trillion) BONK tokens.
+
+- 19.5 Trillion allocated to holders of 39 Solana NFT projects proportionally (500B per project split among holders by # of project NFTs held).
+- 5 Trillion allocated to core developers of BONK. 
+- 10 Trillion allocated to specific NFT/art collectors in the ecosystem.
+- 15 Trillion allocation to Openbook contributors.
+
+While the latter 3 categories ('devs', 'art', 'openbook') were specifically known, there were a few issues 
+that arose with delivering tokens to holders of NFT projects. 
+
+(1) NFT projects allow different use cases for their NFTs, e.g., staking NFTs. These NFTs would be (temporarily) 
+held by Solana programs, with an IOU to the staker. Do to differences in how projects create, manage, and implement
+these use cases and staking programs, the 'owner' of an NFT on-chain could be a staking contract and not the person who staked the NFT. 
+
+This problem is not unique to Solana. The holder of an asset on a blockchain is not necessarily the owner of that asset. The way around this issue is often to give the owner a tokenized IOU, e.g., how depositing USDC into AAVE returns aUSDC to the depositor. Again, due to differences in how NFT projects implement their contracts it is rarely feasible for any airdrop designer to systemically caveat every possible way a holder of an asset is not the owner and then find the owner.  
+
+(2) The snapshots were not time stamped to a Block Height.
+
+Blockchains don't care about human time, they care about their block order. If you want to measure the historical state of a blockchain you specify a block, e.g., Solana block 171,629,029 which canonically comes after its parent block 171,629,028.
+
+Because NFTs are bought, sold, traded, transferred, staked, and unstaked all the time the holder of any specific NFT ID #
+is in flux.
+
+The airdrop_files/ folder in this report repo has 39 text files of holders of specific NFTs, and 3 text files for the devs, art collectors, and openbook contributors. The 39 NFT specific files do not have their original queries exactly reproducible due to lack of time stamping. 
+
+It happens. An analyst writes a query to identify holders of an NFT and downloads it ready to use it to distribute tokens. Not expecting that any specific airdrop design will need to be re-run over and over and verified and have nuance added in ("oh we found out this specific address can't receive tokens or they're trapped!").
+
+
+# Reconciliation 
+
+AS mentioned, transactions can fail. So the airdrop distributed 30T+ BONK but not everyone got the amount they expected to receive. With the BONK still held by the airdropper address, a new set of transactions needed to be organize that closed the gaps between those who got 0 of their tokens or less than they deserved. 
+
+## All BONK Recipients 
+
+To do the account reconciliation we identified all receivers of BONK on/after 2022-12-24 and before 2023-01-06 when the reconciliation effort was completed from the 
+airdropper address: `9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw`, knowing BONK's id is 
+`DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263`.
+
+We used Flipside Crypto's [shroomDK API](https://sdk.flipsidecrypto.xyz/shroomdk) to bring this data 
+into R for analysis and verification using the shroomDK R package available on CRAN. Click the CODE button to see the query.
+
+```{r}
+library(shroomDK)
+library(dplyr)
+library(reactable)
+options(scipen = 99) # these numbers get big lol
+
+# Airdrop Recipients ----
+recipients_query <- {
+  "
+with recipients as (SELECT tx_id, tx_from as giver, tx_to as receiver, amount, mint from 
+  solana.core.fact_transfers
+  where tx_from = '9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw'
+  and mint = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'
+  and block_timestamp > '2022-12-24' and block_timestamp < '2023-01-06'
+)
+ 
+SELECT receiver, COUNT(*) as n_airdrops, SUM(amount) as claimed_token_volume
+FROM recipients
+GROUP BY receiver
+  "
+}
+
+# Get API key at https://sdk.flipsidecrypto.xyz/shroomdk 
+api_key = readLines("api_key.txt")
+
+bonk_receivers <- auto_paginate_query(recipients_query, api_key = api_key)
+bonk_receivers <- bonk_receivers %>% 
+  arrange(CLAIMED_TOKEN_VOLUME) 
+
+reactable(head(bonk_receivers))
+```
+
+`r nrow(bonk_receivers)` addresses received airdrops from the airdropper address but this
+includes more than just the airdrop, e.g., token vesting, DAO funds, treasury, etc.
+
+So this list of addresses had to be cross-references to those in the snapshot for the 49.5T allocated 
+to the airdrop. 
+
+## Airdrop Specific Allocation
+
+To identify only those addresses in the 49.5T allocation, each of the airdrop_files/ were parsed, 
+any errors in addresses (i.e., errant quotes and commas) were fixed. 
+
+This returns 1 row for each address-count-category-allocation. 
+
+```{r}
+
+# Loop Through Files and get target data frame ----
+
+nft_holders_at_snapshot <- data.frame()
+for(i in list.files("airdrop_files/", full.names = TRUE)){
+  temp <- readLines(i)
+  df_freq <- as.data.frame(table(temp))
+  colnames(df_freq) <- c("address","count")
+  df_freq$category <- gsub("airdrop_files/|\\.txt","",i)
+  
+  nft_holders_at_snapshot <- rbind.data.frame(nft_holders_at_snapshot, df_freq)
+}
+
+# CLEAN NAMES ----
+
+# Solana addresses cannot have quotes or commas in them...
+
+busted_index <- grepl("\"|,",nft_holders_at_snapshot$address)
+nft_holders_at_snapshot$address <- gsub("\"|,","", nft_holders_at_snapshot$address)
+
+# Identify Target Allocation ----
+
+# Identify total count within category
+# Allocation count / total_count * 500 (multiply by billion later)
+
+nft_holders_at_snapshot <- nft_holders_at_snapshot %>% 
+  group_by(category) %>% 
+  mutate(total_in_category = sum(count))
+
+nft_holders_at_snapshot <- nft_holders_at_snapshot %>% 
+  group_by(category) %>% 
+  mutate(allocation_billions = 500 * count/total_in_category)
+
+# Exceptions:
+# Developers: 5T (10x the 500 base)
+# Art Collectors: 10T  (this is 20x base)
+# Openbook: 15T (30x base)
+
+nft_holders_at_snapshot$allocation_billions[grepl("devs -", nft_holders_at_snapshot$category)] <- {
+  nft_holders_at_snapshot$allocation_billions[grepl("devs -", nft_holders_at_snapshot$category)] * 10
+}
+
+nft_holders_at_snapshot$allocation_billions[grepl("art -", nft_holders_at_snapshot$category)] <- {
+  nft_holders_at_snapshot$allocation_billions[grepl("art -", nft_holders_at_snapshot$category)] * 20
+}
+nft_holders_at_snapshot$allocation_billions[grepl("openbook -", nft_holders_at_snapshot$category)] <- {
+  nft_holders_at_snapshot$allocation_billions[grepl("openbook -", nft_holders_at_snapshot$category)] * 30
+}
+
+reactable(head(nft_holders_at_snapshot))
+
+```
+
+## Aggregation of Allocation
+
+For those addresses that meet multiple categories, we aggregate up to the address-sum(allocation) level and 
+multiply by 1 billion to get the actual count of tokens they should have received.
+
+```{r}
+
+# Swap dev names b/c we don't want to see ABCD.sol we want the raw address 
+
+dev_names <- read.csv("dev_name_swap.csv", header = FALSE)
+
+for(i in 1:nrow(dev_names)){
+  nft_holders_at_snapshot$address <- gsub(dev_names$V1[i], dev_names$V2[i], nft_holders_at_snapshot$address )
+}
+
+# Identify Allocation across Categories ----
+
+target_recipients <- nft_holders_at_snapshot %>% 
+  group_by(address) %>%
+  summarise(total_allocation = sum(allocation_billions)*1e9) 
+
+
+reactable(head(target_recipients))
+```
+
+We now have 2 tables:
+
+- A bonk_receivers table that has all *actual* BONK recipients from the airdropper address between the specified dates.
+- A target_recipients table that has the BONK amounts each address was *supposed* to receive given our defined criteria.
+
+We then do a FULL JOIN so that every address in both tables exists in our final_bonk table. This table has 
+the following columns:
+
+- RECEIVER: The address that actually received OR was supposed to receive BONK.
+- N_AIRDROPS: The number of transactions that *actually* sent BONK to the airdrop from the airdropper address. 
+If this is NA, it is because they were *supposed* to receive BONK but did not!
+- CLAIMED_TOKEN_VOLUME: This is the amount of BONK *actually* received from the airdropper address. If this is NA, it 
+is because they did not receive the BONK they were supposed to.
+- total_allocation: The amount of BONK they were *supposed* to receive. If this is NA, it is because the address received BONK for a reason that is not in the airdrop_files/; this can include a DAO Treasury or token vesting, or other reasons not specified here.
+
+## Merge & Categorize
+
+```{r}
+# Merge to actual_receivers ----
+
+final_bonk <- merge(bonk_receivers, target_recipients,
+                    by.x = "RECEIVER", by.y = "address", 
+                    all.x = TRUE, all.y = TRUE)
+
+reactable(head(final_bonk))
+
+```
+
+We then categorize each address as one of the following: 
+
+- `Did not Receive Drop`: Has a non-zero total_allocation but did not receive any BONK.
+- `Received w/o NFT qualification`: Received BONK from airdropper address without being in the airdrop_files, again, potentially Treasury or vesting addresses. These were outside of the scope for reconciliation.
+- `Received Exact Drop!`: The amount received from the airdropper address exactly matched the allocation.
+- `Received More than Expected`: They received more from the airdropper address than allocated. This may be individuals who simply got lucky and there was a mixup in send transactions, or potentially they are both in the airdrop_files and had another reason to receive BONK that is not detailed. 
+- `Missing a piece of their drop`: They received part of their allocation but have a gap.
+
+Swapping in 0 for `NA` values we can then subtract the amount received from their total_allocation and we have the 
+discrepancy amount.
+
+```{r}
+
+final_bonk <- final_bonk %>% mutate(
+  label = case_when(
+    is.na(CLAIMED_TOKEN_VOLUME) & !is.na(total_allocation) ~ "Did not Receive Drop",
+    !is.na(CLAIMED_TOKEN_VOLUME) & is.na(total_allocation) ~ "Received w/o NFT qualification",
+    CLAIMED_TOKEN_VOLUME == total_allocation ~ "Received Exact Drop!",
+    CLAIMED_TOKEN_VOLUME > total_allocation ~ "Received More than Expected",
+    CLAIMED_TOKEN_VOLUME < total_allocation ~ "Missing a piece of their drop"
+  )
+)
+
+final_bonk[is.na(final_bonk)] <- 0
+final_bonk$discrepancy <- final_bonk$CLAIMED_TOKEN_VOLUME - final_bonk$total_allocation
+
+reactable(head(final_bonk))
+```
+
+# Conclusion 
+
+Due to rounding and how blockchains often use fixed point math / have a maximum number of decimals for tokens; 
+a few addresses have an extremely small discrepancy, e.g., 0.000006943 BONK. In practice, we submitted a reconciliation 
+report that ignored discrepancies of < 1 BONK to effectively treat them as `Received Exact Drop`. 
+
+Overall, about 7.3T BONK was outstanding to those who did not receive a drop or were missing a piece. This was 
+well within the 9T BONK available for reconciliation and SOL users should lookout for further announcements on distribution 
+of this discrepancy.
+
+```{r}
+
+fb <- final_bonk %>% group_by(label) %>% 
+  summarise(
+    total_received = sum(CLAIMED_TOKEN_VOLUME),
+    total_owed = sum(total_allocation),
+    diff =  sum(CLAIMED_TOKEN_VOLUME) - sum(total_allocation)
+  )
+
+reactable(head(as.data.frame(fb) %>% format(. , big.mark = ",")))
+```
+
+

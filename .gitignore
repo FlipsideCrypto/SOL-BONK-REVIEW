@@ -49,3 +49,4 @@ po/*~
 rsconnect/
 api_key.txt
 bonk_review_labeled__xl.xlsx
+*.html
